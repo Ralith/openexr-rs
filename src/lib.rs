@@ -1,5 +1,6 @@
 extern crate libc;
 extern crate openexr_sys;
+extern crate half;
 
 mod cexr_type_aliases;
 mod error;

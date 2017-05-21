@@ -7,7 +7,7 @@ use libc::{c_char, c_int};
 use openexr_sys::*;
 
 use cexr_type_aliases::*;
-
+use half::f16;
 
 /// Types used by OpenEXR to represent a value held by a particular channel at
 /// a particular point, suitable for being to directly by the decoder.
@@ -18,6 +18,12 @@ pub unsafe trait ChannelData: Copy + Into<f64> {
 unsafe impl ChannelData for u32 {
     fn pixel_type() -> PixelType {
         PixelType::UINT
+    }
+}
+
+unsafe impl ChannelData for f16 {
+    fn pixel_type() -> PixelType {
+        PixelType::HALF
     }
 }
 

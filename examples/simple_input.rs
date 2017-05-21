@@ -1,15 +1,21 @@
 extern crate openexr;
+extern crate half;
 
+use std::env;
 use std::path::Path;
+
+use half::f16;
 
 use openexr::{FrameBuffer, InputFile, PixelType};
 
 fn main() {
     // Open the EXR file and get its dimensions.
-    let exr_file = InputFile::from_file(Path::new("/tmp/test.exr")).unwrap();
+    let exr_file = InputFile::from_file(Path::new(&env::args_os().nth(1).expect("argument required"))).unwrap();
     let window = exr_file.header().data_window();
     let width = window.max.x - window.min.x + 1;
     let height = window.max.y - window.min.y + 1;
+
+    println!("read {}x{} image", width, height);
 
     // Make sure the channels we want exist in the file
     assert!(exr_file
@@ -29,7 +35,7 @@ fn main() {
                 .pixel_type == PixelType::FLOAT);
 
     // Create our pixel data buffer and load the data from the file
-    let mut pixel_data: Vec<(f32, f32, f32)> = vec![(0.0, 0.0, 0.0); (width*height) as usize];
+    let mut pixel_data: Vec<[f16; 3]> = vec![[f16::from_f32(0.0), f16::from_f32(0.0), f16::from_f32(0.0)]; (width*height) as usize];
 
     {
         let mut fb = {
@@ -42,8 +48,8 @@ fn main() {
         exr_file.read_pixels(&mut fb).unwrap();
     }
 
-    // Verify the data is what we expect
-    for pixel in pixel_data {
-        assert_eq!(pixel, (0.82, 1.78, 0.21));
-    }
+    let first = pixel_data[0];
+    println!("first pixel is ({}, {}, {})", first[0], first[1], first[2]);
+    let last = pixel_data[pixel_data.len()-1];
+    println!("last pixel is ({}, {}, {})", last[0], last[1], last[2]);
 }
