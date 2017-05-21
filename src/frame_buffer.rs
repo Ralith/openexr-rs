@@ -33,34 +33,81 @@ unsafe impl ChannelData for f32 {
 /// Types that represent the values of an arbitrary collection of channels at
 /// a particular point, suitable for being written to directly by the decoder.
 pub unsafe trait PixelStruct: Copy {
-    /// Returns an array of the types and byte offsets of the channels in the data
-    fn channels() -> &'static [(PixelType, usize)];
-}
+    /// Returns the number of channels in this struct
+    fn channel_count() -> usize;
 
-unsafe impl PixelStruct for (f32, f32) {
-    fn channels() -> &'static [(PixelType, usize)] {
-        static TYPES: [(PixelType, usize); 2] = [(PixelType::FLOAT, 0), (PixelType::FLOAT, 4)];
-        &TYPES
+    /// Returns the type and offset of channel `i`
+    /// # Panics
+    /// Will either panic or return garbage when `i >= channel_count()`.
+    fn channel(i: usize) -> (PixelType, usize);
+
+    /// Returns an iterator over the set of channels
+    ///
+    /// Automatically implemented in terms of `channel_count` and `channel`
+    fn channels() -> PixelStructChannels {
+        fn helper<T: PixelStruct>(i: usize) -> (PixelType, usize) { T::channel(i) }
+        (0..Self::channel_count()).map(helper::<Self>)
     }
 }
 
-unsafe impl PixelStruct for (f32, f32, f32) {
-    fn channels() -> &'static [(PixelType, usize)] {
-        static TYPES: [(PixelType, usize); 3] = [(PixelType::FLOAT, 0),
-                                                 (PixelType::FLOAT, 4),
-                                                 (PixelType::FLOAT, 8)];
-        &TYPES
+type PixelStructChannels = ::std::iter::Map<::std::ops::Range<usize>, fn(usize) -> (PixelType, usize)>;
+
+unsafe impl<T: ChannelData> PixelStruct for T {
+    fn channel_count() -> usize { 1 }
+    fn channel(_: usize) -> (PixelType, usize) { (T::pixel_type(), 0) }
+}
+
+unsafe impl<A, B> PixelStruct for (A, B)
+    where A: ChannelData, B: ChannelData
+{
+    fn channel_count() -> usize { 2 }
+    fn channel(i: usize) -> (PixelType, usize) {
+        [(A::pixel_type(), 0),
+         (B::pixel_type(), mem::size_of::<A>())][i]
     }
 }
 
-unsafe impl PixelStruct for (f32, f32, f32, f32) {
-    fn channels() -> &'static [(PixelType, usize)] {
-        static TYPES: [(PixelType, usize); 4] = [(PixelType::FLOAT, 0),
-                                                 (PixelType::FLOAT, 4),
-                                                 (PixelType::FLOAT, 8),
-                                                 (PixelType::FLOAT, 12)];
-        &TYPES
+unsafe impl<A, B, C> PixelStruct for (A, B, C)
+    where A: ChannelData, B: ChannelData, C: ChannelData
+{
+    fn channel_count() -> usize { 3 }
+    fn channel(i: usize) -> (PixelType, usize) {
+        [(A::pixel_type(), 0),
+         (B::pixel_type(), mem::size_of::<A>()),
+         (C::pixel_type(), mem::size_of::<A>() + mem::size_of::<B>())][i]
     }
+}
+
+unsafe impl<A, B, C, D> PixelStruct for (A, B, C, D)
+    where A: ChannelData, B: ChannelData, C: ChannelData, D: ChannelData
+{
+    fn channel_count() -> usize { 4 }
+    fn channel(i: usize) -> (PixelType, usize) {
+        [(A::pixel_type(), 0),
+         (B::pixel_type(), mem::size_of::<A>()),
+         (C::pixel_type(), mem::size_of::<A>() + mem::size_of::<B>()),
+         (D::pixel_type(), mem::size_of::<A>() + mem::size_of::<B>() + mem::size_of::<C>())][i]
+    }
+}
+
+unsafe impl<T: ChannelData> PixelStruct for [T; 1] {
+    fn channel_count() -> usize { 1 }
+    fn channel(_: usize) -> (PixelType, usize) { (T::pixel_type(), 0) }
+}
+
+unsafe impl<T: ChannelData> PixelStruct for [T; 2] {
+    fn channel_count() -> usize { 2 }
+    fn channel(i: usize) -> (PixelType, usize) { (T::pixel_type(), i * mem::size_of::<T>()) }
+}
+
+unsafe impl<T: ChannelData> PixelStruct for [T; 3] {
+    fn channel_count() -> usize { 3 }
+    fn channel(i: usize) -> (PixelType, usize) { (T::pixel_type(), i * mem::size_of::<T>()) }
+}
+
+unsafe impl<T: ChannelData> PixelStruct for [T; 4] {
+    fn channel_count() -> usize { 4 }
+    fn channel(i: usize) -> (PixelType, usize) { (T::pixel_type(), i * mem::size_of::<T>()) }
 }
 
 // ------------------------------------------------------------------------------
@@ -135,7 +182,7 @@ impl<'a> FrameBuffer<'a> {
                    self._dimensions.1);
         }
         let width = self._dimensions.0;
-        for (&(name, fill), &(ty, offset)) in channels.iter().zip(T::channels()) {
+        for (&(name, fill), (ty, offset)) in channels.iter().zip(T::channels()) {
             unsafe {
                 self.insert_raw(name,
                                 ty,
